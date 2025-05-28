@@ -7,10 +7,6 @@ TYPE_REQUEST = 3
 TYPE_ANSWER = 4
 Error = -1  # 错误报文
 
-# ServerIP ServerPort (先初始化，后面client启动会修改)
-serverIP = 0
-serverPort = 0
-
 # client握手请求报文
 def pack_initialization(n):
     return struct.pack('!HI', TYPE_INIT, n)  # Type (2 Bytes) + N (4 Bytes)
@@ -31,22 +27,42 @@ def unpack_agree(data):
 
 # client发送reverse请求报文
 def pack_reverse_request(chunk):
-    data = chunk.encode('ascii')
+    if isinstance(chunk, str):
+        data = chunk.encode('ascii')  # 确保是 bytes
+    elif isinstance(chunk, bytes):
+        data = chunk
+    else:
+        raise TypeError("Expected str or bytes for chunk")
     return struct.pack('!HI', TYPE_REQUEST, len(data)) + data
 
 # server解包reverse请求报文
 def unpack_reverse_request(data):
-    header, length = struct.unpack('!HI', data[:6])
+    header, length, number = struct.unpack('!HI', data[:6])
     content = data[6:6+length].decode('ascii')
     return header, content
 
 # server发送reverse结果报文
 def pack_reverse_answer(chunk):
-    data = chunk.encode('ascii')
+    if isinstance(chunk, str):
+        data = chunk.encode('ascii')  # 确保是 bytes
+    elif isinstance(chunk, bytes):
+        data = chunk
+    else:
+        raise TypeError("Expected str or bytes for chunk")
     return struct.pack('!HI', TYPE_ANSWER, len(data)) + data
 
 # client解包server发来的answer报文
 def unpack_reverse_answer(data):
-    header, length = struct.unpack('!HI', data[:6])
+    type, length = struct.unpack('!HI', data[:6])
     content = data[6:6+length].decode('ascii')
-    return header, content
+    return type, content
+
+# 精确读数据
+def recv_exact(sock, size):
+    data = b''
+    while len(data) < size:
+        more = sock.recv(size - len(data))
+        if not more:
+            raise ConnectionError("Socket closed before receiving enough data.")
+        data += more
+    return data

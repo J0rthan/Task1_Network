@@ -7,7 +7,7 @@ from socket import *
 def split_Message(file_path, Lmin, Lmax):
     # 先读文件
     with open(file_path, 'r', encoding='ASCII') as file:
-        data = file.read()
+        data = file.read()  # type(data) == str
 
     chunks = list()
     idx = 0
@@ -32,7 +32,7 @@ def main():
     serverPort = int(sys.argv[2])
     Lmin = int(sys.argv[3])
     Lmax = int(sys.argv[4])
-    file_path = './test' # 要发送txt文件的位置
+    file_path = './test'  # 要发送txt文件的位置
 
     # 返回分块结果列表
     chunks = split_Message(file_path, Lmin, Lmax)
@@ -44,21 +44,37 @@ def main():
 
     N = len(chunks)  # 要发送的次数
     Initial_Message = pack_initialization(N)
-    clientSocket.send(Initial_Message)  # 发送握手报文
-    Agree_Message = unpack_agree(clientSocket.recv(2))  # 接受Agree报文，2bytes
-    if(Agree_Message[0] == TYPE_AGREE): # 接收到正确报文，开始发送各分块
+    clientSocket.sendall(Initial_Message)  # 发送握手报文
+    Agree_Message = unpack_agree(recv_exact(clientSocket, 2))  # 接受Agree报文，2bytes
+    if Agree_Message[0] == TYPE_AGREE:  # 接收到正确报文，开始发送各分块
+        result = []
         for i in range(N):
             msg = pack_reverse_request(chunks[i])
-            pack_reverse_request(msg)
+            clientSocket.sendall(msg)
 
-            # 发完之后准备接收
-            receive_msg = clientSocket.recv(1024)
-            header, content = unpack_reverse_answer()
-            print(content)  # 在终端打印显示
-            with open('output.txt', 'a', encoding='ASCII') as f:
-                f.write(content)
+            # 发完之后准备接收首部
+            header = recv_exact(clientSocket, 6)
+            type, length = struct.unpack('!HI', header)
 
+            # 接受data部分
+            data = recv_exact(clientSocket, length)
+            content = data.decode('ascii')
+            result.append((i, content))  # 把二元组放到容器中
 
+            # 打印
+            print("%d: %s" % (i, content))
+
+        # 整合收到的所有数据
+        # 按编号排序
+        result.sort(key=lambda x: x[0])
+        res = result[::-1]
+
+        # 提取所有内容并拼接
+        full_text = ''.join(item[1] for item in res)
+
+        # 写文件
+        with open('./output.txt', 'w') as file:
+            file.write(full_text)
 
 
 if __name__ == "__main__":
